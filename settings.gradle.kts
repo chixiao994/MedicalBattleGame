@@ -1,3 +1,4 @@
+// settings.gradle.kts
 pluginManagement {
     repositories {
         google()
@@ -14,5 +15,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "MedicalBattleGame"
+rootProject.name = "PureTCMBattle"
 include(":app")
