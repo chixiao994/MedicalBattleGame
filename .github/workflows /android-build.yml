@@ -1,7 +1,9 @@
-name: Android Build
+name: Android CI
 
 on:
   push:
+    branches: [ main ]
+  pull_request:
     branches: [ main ]
 
 jobs:
@@ -10,75 +12,125 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
-      
+      uses: actions/checkout@v3
+    
     - name: Set up JDK 17
       uses: actions/setup-java@v3
       with:
         java-version: '17'
         distribution: 'temurin'
-        
+    
     - name: Setup Android SDK
       uses: android-actions/setup-android@v2
-      with:
-        # 明确指定要安装的组件
-        api-level: 33
-        build-tools: 33.0.0
-        # 确保SDK路径正确设置
-      
-    - name: Verify Android SDK
+    
+    - name: Create required Gradle files
       run: |
-        echo "ANDROID_HOME: $ANDROID_HOME"
-        echo "ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT"
+        # 创建 gradle-wrapper.properties 文件
+        mkdir -p gradle/wrapper
+        cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
+distributionBase=GRADLE_USER_HOME
+distributionPath=wrapper/dists
+distributionUrl=https\://services.gradle.org/distributions/gradle-8.2-bin.zip
+zipStoreBase=GRADLE_USER_HOME
+zipStorePath=wrapper/dists
+EOF
         
-        # 确保环境变量已设置
-        if [ -z "$ANDROID_HOME" ]; then
-          export ANDROID_HOME="/usr/local/lib/android/sdk"
-          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
-        fi
+        # 创建 settings.gradle.kts
+        cat > settings.gradle.kts << 'EOF'
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "MedicalBattleGame"
+include(":app")
+EOF
         
-        if [ -z "$ANDROID_SDK_ROOT" ]; then
-          export ANDROID_SDK_ROOT="/usr/local/lib/android/sdk"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-        fi
+        # 创建 build.gradle.kts (root)
+        cat > build.gradle.kts << 'EOF'
+plugins {
+    id("com.android.application") version "8.1.2" apply false
+    id("org.jetbrains.kotlin.android") version "1.9.0" apply false
+}
+EOF
         
-        echo "设置后的环境变量:"
-        echo "ANDROID_HOME=$ANDROID_HOME"
-        echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+        # 创建 app/build.gradle.kts
+        mkdir -p app
+        cat > app/build.gradle.kts << 'EOF'
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
+android {
+    namespace = "com.medical.battle"
+    compileSdk = 34
+
+    defaultConfig {
+        applicationId = "com.medical.battle"
+        minSdk = 24
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0"
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+        }
+    }
+    
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}
+
+dependencies {
+    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.appcompat:appcompat:1.6.1")
+}
+EOF
         
-        # 验证SDK是否存在
-        if [ -d "$ANDROID_HOME" ]; then
-          echo "✅ Android SDK目录存在"
-          ls -la $ANDROID_HOME/
-        else
-          echo "❌ Android SDK目录不存在"
-          # 创建local.properties文件作为备选方案
-          echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
-          echo "创建了local.properties文件"
-        fi
-      
-    - name: Create local.properties (备用)
-      run: |
-        # 创建local.properties文件，Gradle会读取这个文件
-        echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
-        echo "local.properties内容:"
-        cat local.properties
-      
+        # 创建 local.properties
+        echo "sdk.dir=$ANDROID_HOME" > local.properties
+    
     - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
-      
+      run: |
+        # 如果 gradlew 不存在，创建它
+        if [ ! -f gradlew ]; then
+          wget https://raw.githubusercontent.com/gradle/gradle/master/gradlew
+          chmod +x gradlew
+        else
+          chmod +x gradlew
+        fi
+    
     - name: Build with Gradle
       run: |
-        # 显示完整环境
-        echo "=== 构建环境 ==="
-        ./gradlew --version
-        echo ""
-        echo "=== 开始构建 ==="
-        ./gradlew assembleDebug --no-daemon --stacktrace
-      
+        # 先运行 wrapper 任务生成 wrapper 文件
+        ./gradlew wrapper --gradle-version 8.2
+        
+        # 清理并构建
+        ./gradlew clean
+        ./gradlew build
+    
     - name: Upload APK
-      if: success()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v3
       with:
-        name: pdf-reader-apk
-        path: app/build/outputs/apk/debug/*.apk
+        name: app-debug
+        path: app/build/outputs/apk/debug/app-debug.apk
