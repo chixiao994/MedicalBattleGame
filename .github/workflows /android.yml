@@ -1,0 +1,342 @@
+name: Android Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up JDK 17
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      
+    - name: Create required directories
+      run: |
+        mkdir -p gradle/wrapper
+        mkdir -p app/src/main/java/com/tcm/battle
+        mkdir -p app/src/main/res/{layout,values}
+        
+    - name: Create missing files
+      run: |
+        # 1. gradle-wrapper.properties
+        cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
+distributionBase=GRADLE_USER_HOME
+distributionPath=wrapper/dists
+distributionUrl=https\://services.gradle.org/distributions/gradle-8.2-bin.zip
+zipStoreBase=GRADLE_USER_HOME
+zipStorePath=wrapper/dists
+EOF
+        
+        # 2. settings.gradle.kts
+        cat > settings.gradle.kts << 'EOF'
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "TCMBattleGame"
+include(":app")
+EOF
+        
+        # 3. build.gradle.kts (root)
+        cat > build.gradle.kts << 'EOF'
+plugins {
+    id("com.android.application") version "8.1.2" apply false
+    id("org.jetbrains.kotlin.android") version "1.9.0" apply false
+}
+EOF
+        
+        # 4. gradle.properties
+        cat > gradle.properties << 'EOF'
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+android.useAndroidX=true
+kotlin.code.style=official
+EOF
+        
+        # 5. app/build.gradle.kts
+        cat > app/build.gradle.kts << 'EOF'
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
+android {
+    namespace = "com.tcm.battle"
+    compileSdk = 34
+
+    defaultConfig {
+        applicationId = "com.tcm.battle"
+        minSdk = 21
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0"
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+        }
+    }
+    
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+    
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
+}
+
+dependencies {
+    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("com.google.android.material:material:1.10.0")
+}
+EOF
+        
+        # 6. AndroidManifest.xml
+        cat > app/src/main/AndroidManifest.xml << 'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:allowBackup="true"
+        android:label="中医对战"
+        android:theme="@style/Theme.TCMBattleGame">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:screenOrientation="portrait">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+EOF
+        
+        # 7. MainActivity.kt (简化版)
+        cat > app/src/main/java/com/tcm/battle/MainActivity.kt << 'EOF'
+package com.tcm.battle
+
+import android.os.Bundle
+import android.widget.Button
+import android.widget.TextView
+import androidx.appcompat.app.AppCompatActivity
+
+class MainActivity : AppCompatActivity() {
+    
+    private lateinit var tvStatus: TextView
+    private lateinit var tvLog: TextView
+    
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        
+        tvStatus = findViewById(R.id.tv_status)
+        tvLog = findViewById(R.id.tv_log)
+        
+        // 设置按钮点击事件
+        findViewById<Button>(R.id.btn_diagnose).setOnClickListener {
+            diagnose()
+        }
+        
+        findViewById<Button>(R.id.btn_treat).setOnClickListener {
+            treat()
+        }
+        
+        findViewById<Button>(R.id.btn_restart).setOnClickListener {
+            restart()
+        }
+        
+        updateStatus("游戏开始 - 太阳病")
+    }
+    
+    private fun diagnose() {
+        addLog("🔍 辨证：太阳病")
+        updateStatus("诊断完成 - 太阳伤寒证")
+    }
+    
+    private fun treat() {
+        addLog("💊 治疗：桂枝汤")
+        updateStatus("治疗中...")
+        
+        // 模拟治疗效果
+        Thread {
+            Thread.sleep(1000)
+            runOnUiThread {
+                addLog("✅ 方证对应！病情好转")
+                updateStatus("治疗有效")
+            }
+        }.start()
+    }
+    
+    private fun restart() {
+        tvLog.text = ""
+        updateStatus("重新开始 - 太阳病")
+        addLog("🔄 新游戏开始")
+    }
+    
+    private fun updateStatus(text: String) {
+        tvStatus.text = "状态: $text"
+    }
+    
+    private fun addLog(message: String) {
+        val current = tvLog.text.toString()
+        tvLog.text = "$message\n$current"
+    }
+}
+EOF
+        
+        # 8. activity_main.xml
+        cat > app/src/main/res/layout/activity_main.xml << 'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="20dp"
+    android:background="#f0f0f0">
+    
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="🏥 中医对战游戏"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:textColor="#2E7D32"
+        android:layout_marginBottom="20dp"/>
+    
+    <TextView
+        android:id="@+id/tv_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="状态: 准备开始"
+        android:textSize="18sp"
+        android:textColor="#333"
+        android:layout_marginBottom="20dp"
+        android:padding="15dp"
+        android:background="#FFFFFF"
+        android:elevation="4dp"/>
+    
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="20dp">
+        
+        <Button
+            android:id="@+id/btn_diagnose"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="辨证"
+            android:backgroundTint="#2196F3"
+            android:textColor="#FFFFFF"
+            android:layout_marginEnd="10dp"/>
+            
+        <Button
+            android:id="@+id/btn_treat"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="治疗"
+            android:backgroundTint="#4CAF50"
+            android:textColor="#FFFFFF"/>
+    </LinearLayout>
+    
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="📜 治疗记录"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="#666"
+        android:layout_marginBottom="10dp"/>
+    
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="200dp"
+        android:layout_marginBottom="20dp">
+        
+        <TextView
+            android:id="@+id/tv_log"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="14sp"
+            android:textColor="#666"
+            android:padding="10dp"
+            android:background="#FFFFFF"
+            android:elevation="4dp"/>
+    </ScrollView>
+    
+    <Button
+        android:id="@+id/btn_restart"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="重新开始"
+        android:backgroundTint="#FF9800"
+        android:textColor="#FFFFFF"/>
+    
+</LinearLayout>
+EOF
+        
+        # 9. styles.xml
+        cat > app/src/main/res/values/styles.xml << 'EOF'
+<resources>
+    <style name="Theme.TCMBattleGame" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#2E7D32</item>
+        <item name="colorPrimaryVariant">#1B5E20</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#FF9800</item>
+        <item name="colorSecondaryVariant">#F57C00</item>
+        <item name="colorOnSecondary">#000000</item>
+    </style>
+</resources>
+EOF
+        
+    - name: Download gradlew
+      run: |
+        if [ ! -f gradlew ]; then
+          wget https://raw.githubusercontent.com/gradle/gradle/master/gradlew
+          chmod +x gradlew
+        fi
+        
+    - name: Create local.properties
+      run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+      
+    - name: Build APK
+      run: ./gradlew assembleDebug
+      
+    - name: Upload APK
+      uses: actions/upload-artifact@v3
+      with:
+        name: tcm-battle-debug
+        path: app/build/outputs/apk/debug/app-debug.apk
