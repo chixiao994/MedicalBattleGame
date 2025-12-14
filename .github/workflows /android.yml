@@ -1,14 +1,12 @@
-name: Android Build
+name: Fix Android Build
 
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:  # 允许手动触发
 
 jobs:
-  build:
+  fix-and-build:
     runs-on: ubuntu-latest
     
     steps:
@@ -24,25 +22,28 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       
-    - name: Create required directories
+    - name: Create missing Gradle files
       run: |
+        # 创建必要的目录
         mkdir -p gradle/wrapper
-        mkdir -p app/src/main/java/com/tcm/battle
-        mkdir -p app/src/main/res/{layout,values}
+        mkdir -p app/src/main/java/com/medical/battle
+        mkdir -p app/src/main/res/layout
         
-    - name: Create missing files
-      run: |
-        # 1. gradle-wrapper.properties
-        cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
+        # 1. 创建gradle-wrapper.properties（如果不存在）
+        if [ ! -f gradle/wrapper/gradle-wrapper.properties ]; then
+          cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
 distributionBase=GRADLE_USER_HOME
 distributionPath=wrapper/dists
 distributionUrl=https\://services.gradle.org/distributions/gradle-8.2-bin.zip
 zipStoreBase=GRADLE_USER_HOME
 zipStorePath=wrapper/dists
 EOF
+          echo "✅ Created gradle-wrapper.properties"
+        fi
         
-        # 2. settings.gradle.kts
-        cat > settings.gradle.kts << 'EOF'
+        # 2. 创建settings.gradle.kts（如果不存在）
+        if [ ! -f settings.gradle.kts ]; then
+          cat > settings.gradle.kts << 'EOF'
 pluginManagement {
     repositories {
         google()
@@ -59,38 +60,47 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "TCMBattleGame"
+rootProject.name = "MedicalBattleGame"
 include(":app")
 EOF
+          echo "✅ Created settings.gradle.kts"
+        fi
         
-        # 3. build.gradle.kts (root)
-        cat > build.gradle.kts << 'EOF'
+        # 3. 创建根目录build.gradle.kts（如果不存在）
+        if [ ! -f build.gradle.kts ]; then
+          cat > build.gradle.kts << 'EOF'
 plugins {
     id("com.android.application") version "8.1.2" apply false
     id("org.jetbrains.kotlin.android") version "1.9.0" apply false
 }
 EOF
+          echo "✅ Created build.gradle.kts"
+        fi
         
-        # 4. gradle.properties
-        cat > gradle.properties << 'EOF'
+        # 4. 创建gradle.properties（如果不存在）
+        if [ ! -f gradle.properties ]; then
+          cat > gradle.properties << 'EOF'
 org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
 android.useAndroidX=true
 kotlin.code.style=official
 EOF
+          echo "✅ Created gradle.properties"
+        fi
         
-        # 5. app/build.gradle.kts
-        cat > app/build.gradle.kts << 'EOF'
+        # 5. 创建app/build.gradle.kts（如果不存在）
+        if [ ! -f app/build.gradle.kts ]; then
+          cat > app/build.gradle.kts << 'EOF'
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
 
 android {
-    namespace = "com.tcm.battle"
+    namespace = "com.medical.battle"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.tcm.battle"
+        applicationId = "com.medical.battle"
         minSdk = 21
         targetSdk = 34
         versionCode = 1
@@ -119,15 +129,18 @@ dependencies {
     implementation("com.google.android.material:material:1.10.0")
 }
 EOF
+          echo "✅ Created app/build.gradle.kts"
+        fi
         
-        # 6. AndroidManifest.xml
-        cat > app/src/main/AndroidManifest.xml << 'EOF'
+        # 6. 创建AndroidManifest.xml（如果不存在）
+        if [ ! -f app/src/main/AndroidManifest.xml ]; then
+          cat > app/src/main/AndroidManifest.xml << 'EOF'
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
         android:allowBackup="true"
-        android:label="中医对战"
-        android:theme="@style/Theme.TCMBattleGame">
+        android:label="医战游戏"
+        android:theme="@style/Theme.MedicalBattleGame">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -140,10 +153,14 @@ EOF
     </application>
 </manifest>
 EOF
+          echo "✅ Created AndroidManifest.xml"
+        fi
         
-        # 7. MainActivity.kt (简化版)
-        cat > app/src/main/java/com/tcm/battle/MainActivity.kt << 'EOF'
-package com.tcm.battle
+        # 7. 创建MainActivity.kt（如果不存在）
+        if [ ! -f app/src/main/java/com/medical/battle/MainActivity.kt ]; then
+          mkdir -p app/src/main/java/com/medical/battle
+          cat > app/src/main/java/com/medical/battle/MainActivity.kt << 'EOF'
+package com.medical.battle
 
 import android.os.Bundle
 import android.widget.Button
@@ -152,191 +169,84 @@ import androidx.appcompat.app.AppCompatActivity
 
 class MainActivity : AppCompatActivity() {
     
-    private lateinit var tvStatus: TextView
-    private lateinit var tvLog: TextView
-    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         
-        tvStatus = findViewById(R.id.tv_status)
-        tvLog = findViewById(R.id.tv_log)
+        val tvTitle = findViewById<TextView>(R.id.tv_title)
+        val btnStart = findViewById<Button>(R.id.btn_start)
         
-        // 设置按钮点击事件
-        findViewById<Button>(R.id.btn_diagnose).setOnClickListener {
-            diagnose()
+        tvTitle.text = "🏥 医战游戏"
+        
+        btnStart.setOnClickListener {
+            tvTitle.text = "游戏开始！\n选择症状进行辨证"
         }
-        
-        findViewById<Button>(R.id.btn_treat).setOnClickListener {
-            treat()
-        }
-        
-        findViewById<Button>(R.id.btn_restart).setOnClickListener {
-            restart()
-        }
-        
-        updateStatus("游戏开始 - 太阳病")
-    }
-    
-    private fun diagnose() {
-        addLog("🔍 辨证：太阳病")
-        updateStatus("诊断完成 - 太阳伤寒证")
-    }
-    
-    private fun treat() {
-        addLog("💊 治疗：桂枝汤")
-        updateStatus("治疗中...")
-        
-        // 模拟治疗效果
-        Thread {
-            Thread.sleep(1000)
-            runOnUiThread {
-                addLog("✅ 方证对应！病情好转")
-                updateStatus("治疗有效")
-            }
-        }.start()
-    }
-    
-    private fun restart() {
-        tvLog.text = ""
-        updateStatus("重新开始 - 太阳病")
-        addLog("🔄 新游戏开始")
-    }
-    
-    private fun updateStatus(text: String) {
-        tvStatus.text = "状态: $text"
-    }
-    
-    private fun addLog(message: String) {
-        val current = tvLog.text.toString()
-        tvLog.text = "$message\n$current"
     }
 }
 EOF
+          echo "✅ Created MainActivity.kt"
+        fi
         
-        # 8. activity_main.xml
-        cat > app/src/main/res/layout/activity_main.xml << 'EOF'
+        # 8. 创建布局文件（如果不存在）
+        if [ ! -f app/src/main/res/layout/activity_main.xml ]; then
+          cat > app/src/main/res/layout/activity_main.xml << 'EOF'
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:padding="20dp"
-    android:background="#f0f0f0">
+    android:background="#f0f0f0"
+    android:gravity="center">
     
     <TextView
+        android:id="@+id/tv_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="🏥 中医对战游戏"
+        android:text="中医对战游戏"
         android:textSize="28sp"
         android:textStyle="bold"
         android:gravity="center"
         android:textColor="#2E7D32"
-        android:layout_marginBottom="20dp"/>
-    
-    <TextView
-        android:id="@+id/tv_status"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="状态: 准备开始"
-        android:textSize="18sp"
-        android:textColor="#333"
-        android:layout_marginBottom="20dp"
-        android:padding="15dp"
-        android:background="#FFFFFF"
-        android:elevation="4dp"/>
-    
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="20dp">
-        
-        <Button
-            android:id="@+id/btn_diagnose"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="辨证"
-            android:backgroundTint="#2196F3"
-            android:textColor="#FFFFFF"
-            android:layout_marginEnd="10dp"/>
-            
-        <Button
-            android:id="@+id/btn_treat"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="治疗"
-            android:backgroundTint="#4CAF50"
-            android:textColor="#FFFFFF"/>
-    </LinearLayout>
-    
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="📜 治疗记录"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:textColor="#666"
-        android:layout_marginBottom="10dp"/>
-    
-    <ScrollView
-        android:layout_width="match_parent"
-        android:layout_height="200dp"
-        android:layout_marginBottom="20dp">
-        
-        <TextView
-            android:id="@+id/tv_log"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textSize="14sp"
-            android:textColor="#666"
-            android:padding="10dp"
-            android:background="#FFFFFF"
-            android:elevation="4dp"/>
-    </ScrollView>
+        android:layout_marginBottom="40dp"/>
     
     <Button
-        android:id="@+id/btn_restart"
-        android:layout_width="match_parent"
+        android:id="@+id/btn_start"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="重新开始"
-        android:backgroundTint="#FF9800"
-        android:textColor="#FFFFFF"/>
-    
+        android:text="开始游戏"
+        android:backgroundTint="#4CAF50"
+        android:textColor="#FFFFFF"
+        android:padding="20dp"
+        android:textSize="18sp"/>
+        
 </LinearLayout>
 EOF
+          echo "✅ Created activity_main.xml"
+        fi
         
-        # 9. styles.xml
-        cat > app/src/main/res/values/styles.xml << 'EOF'
-<resources>
-    <style name="Theme.TCMBattleGame" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="colorPrimary">#2E7D32</item>
-        <item name="colorPrimaryVariant">#1B5E20</item>
-        <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="colorSecondary">#FF9800</item>
-        <item name="colorSecondaryVariant">#F57C00</item>
-        <item name="colorOnSecondary">#000000</item>
-    </style>
-</resources>
-EOF
-        
-    - name: Download gradlew
+    - name: Download gradlew if missing
       run: |
         if [ ! -f gradlew ]; then
-          wget https://raw.githubusercontent.com/gradle/gradle/master/gradlew
+          wget -q https://raw.githubusercontent.com/gradle/gradle/master/gradlew
           chmod +x gradlew
+          echo "✅ Downloaded gradlew"
         fi
         
     - name: Create local.properties
       run: echo "sdk.dir=$ANDROID_HOME" > local.properties
       
-    - name: Build APK
-      run: ./gradlew assembleDebug
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug --no-daemon
       
     - name: Upload APK
       uses: actions/upload-artifact@v3
       with:
-        name: tcm-battle-debug
+        name: medical-battle-apk
         path: app/build/outputs/apk/debug/app-debug.apk
+        
+    - name: Show success message
+      run: |
+        echo "🎉 构建成功！"
+        echo "📱 APK已生成，可在Artifacts中下载"
+        echo "📥 下载后安装到手机即可运行"
