@@ -1,12 +1,14 @@
-name: Fix Android Build
+name: Android Build
 
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:  # 允许手动触发
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-  fix-and-build:
+  build:
     runs-on: ubuntu-latest
     
     steps:
@@ -22,28 +24,24 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       
-    - name: Create missing Gradle files
+    - name: Create project structure
       run: |
-        # 创建必要的目录
+        # 创建所有必需目录
         mkdir -p gradle/wrapper
-        mkdir -p app/src/main/java/com/medical/battle
-        mkdir -p app/src/main/res/layout
+        mkdir -p app/src/main/java/com/tcm/battle
+        mkdir -p app/src/main/res/{layout,values}
         
-        # 1. 创建gradle-wrapper.properties（如果不存在）
-        if [ ! -f gradle/wrapper/gradle-wrapper.properties ]; then
-          cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
+        # 1. gradle-wrapper.properties (核心文件！)
+        cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
 distributionBase=GRADLE_USER_HOME
 distributionPath=wrapper/dists
-distributionUrl=https\://services.gradle.org/distributions/gradle-8.2-bin.zip
+distributionUrl=https\://services.gradle.org/distributions/gradle-8.2-all.zip
 zipStoreBase=GRADLE_USER_HOME
 zipStorePath=wrapper/dists
 EOF
-          echo "✅ Created gradle-wrapper.properties"
-        fi
         
-        # 2. 创建settings.gradle.kts（如果不存在）
-        if [ ! -f settings.gradle.kts ]; then
-          cat > settings.gradle.kts << 'EOF'
+        # 2. settings.gradle.kts
+        cat > settings.gradle.kts << 'EOF'
 pluginManagement {
     repositories {
         google()
@@ -63,190 +61,731 @@ dependencyResolutionManagement {
 rootProject.name = "MedicalBattleGame"
 include(":app")
 EOF
-          echo "✅ Created settings.gradle.kts"
-        fi
         
-        # 3. 创建根目录build.gradle.kts（如果不存在）
-        if [ ! -f build.gradle.kts ]; then
-          cat > build.gradle.kts << 'EOF'
+        # 3. 项目级 build.gradle.kts
+        cat > build.gradle.kts << 'EOF'
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
 plugins {
     id("com.android.application") version "8.1.2" apply false
-    id("org.jetbrains.kotlin.android") version "1.9.0" apply false
+    id("org.jetbrains.kotlin.android") version "1.9.20" apply false
 }
 EOF
-          echo "✅ Created build.gradle.kts"
-        fi
         
-        # 4. 创建gradle.properties（如果不存在）
-        if [ ! -f gradle.properties ]; then
-          cat > gradle.properties << 'EOF'
+        # 4. gradle.properties
+        cat > gradle.properties << 'EOF'
+# Project-wide Gradle settings.
 org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
 android.useAndroidX=true
 kotlin.code.style=official
+
+# Android Studio配置
+android.nonTransitiveRClass=true
 EOF
-          echo "✅ Created gradle.properties"
-        fi
         
-        # 5. 创建app/build.gradle.kts（如果不存在）
-        if [ ! -f app/build.gradle.kts ]; then
-          cat > app/build.gradle.kts << 'EOF'
+        # 5. app/build.gradle.kts
+        cat > app/build.gradle.kts << 'EOF'
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
 
 android {
-    namespace = "com.medical.battle"
+    namespace = "com.tcm.battle"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.medical.battle"
+        applicationId = "com.tcm.battle"
         minSdk = 21
         targetSdk = 34
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables {
+            useSupportLibrary = true
+        }
     }
 
     buildTypes {
-        release {
+        getByName("release") {
             isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
     
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "17"
+    }
+    
+    buildFeatures {
+        compose = false
+        viewBinding = true
     }
 }
 
 dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
+    implementation("androidx.activity:activity-compose:1.8.0")
+    implementation(platform("androidx.compose:compose-bom:2023.10.01"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.material3:material3")
+    
+    // UI组件
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.10.0")
+    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+    
+    // 测试
+    testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2023.10.01"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 EOF
-          echo "✅ Created app/build.gradle.kts"
-        fi
         
-        # 6. 创建AndroidManifest.xml（如果不存在）
-        if [ ! -f app/src/main/AndroidManifest.xml ]; then
-          cat > app/src/main/AndroidManifest.xml << 'EOF'
+        # 6. AndroidManifest.xml
+        cat > app/src/main/AndroidManifest.xml << 'EOF'
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:allowBackup="true"
-        android:label="医战游戏"
-        android:theme="@style/Theme.MedicalBattleGame">
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.MedicalBattleGame"
+        tools:targetApi="31">
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:screenOrientation="portrait">
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
     </application>
+
 </manifest>
 EOF
-          echo "✅ Created AndroidManifest.xml"
-        fi
         
-        # 7. 创建MainActivity.kt（如果不存在）
-        if [ ! -f app/src/main/java/com/medical/battle/MainActivity.kt ]; then
-          mkdir -p app/src/main/java/com/medical/battle
-          cat > app/src/main/java/com/medical/battle/MainActivity.kt << 'EOF'
-package com.medical.battle
+        # 7. MainActivity.kt - 中医对战核心逻辑
+        cat > app/src/main/java/com/tcm/battle/MainActivity.kt << 'EOF'
+package com.tcm.battle
 
+import android.graphics.Color
 import android.os.Bundle
 import android.widget.Button
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import kotlin.random.Random
 
 class MainActivity : AppCompatActivity() {
+    
+    // 六经病证
+    private val sixChannels = listOf("太阳", "阳明", "少阳", "太阴", "少阴", "厥阴")
+    
+    // 经方对应
+    private val channelFormulas = mapOf(
+        "太阳" to "桂枝汤",
+        "阳明" to "白虎汤",
+        "少阳" to "小柴胡汤",
+        "太阴" to "理中丸",
+        "少阴" to "四逆汤",
+        "厥阴" to "乌梅丸"
+    )
+    
+    // 游戏状态
+    private var currentChannel = "太阳"
+    private var severity = 60 // 病情严重度 0-100
+    private var turn = 1
+    private var gameOver = false
+    private var score = 0
+    
+    // UI组件
+    private lateinit var tvChannel: TextView
+    private lateinit var tvSeverity: TextView
+    private lateinit var tvTurn: TextView
+    private lateinit var tvScore: TextView
+    private lateinit var tvLog: TextView
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         
-        val tvTitle = findViewById<TextView>(R.id.tv_title)
-        val btnStart = findViewById<Button>(R.id.btn_start)
+        initViews()
+        startNewGame()
+    }
+    
+    private fun initViews() {
+        tvChannel = findViewById(R.id.tv_channel)
+        tvSeverity = findViewById(R.id.tv_severity)
+        tvTurn = findViewById(R.id.tv_turn)
+        tvScore = findViewById(R.id.tv_score)
+        tvLog = findViewById(R.id.tv_log)
         
-        tvTitle.text = "🏥 医战游戏"
-        
-        btnStart.setOnClickListener {
-            tvTitle.text = "游戏开始！\n选择症状进行辨证"
+        // 症状按钮
+        val symptoms = listOf("恶寒发热", "但热不寒", "寒热往来", "腹满而吐", "脉微细")
+        symptoms.forEachIndexed { index, symptom ->
+            val button = findViewById<Button>(resources.getIdentifier(
+                "btn_symptom${index + 1}", "id", packageName
+            ))
+            button.text = symptom
+            button.setOnClickListener { diagnose(symptom) }
         }
+        
+        // 经方按钮
+        val formulas = listOf("桂枝汤", "白虎汤", "小柴胡汤", "理中丸", "四逆汤", "乌梅丸")
+        formulas.forEachIndexed { index, formula ->
+            val button = findViewById<Button>(resources.getIdentifier(
+                "btn_formula${index + 1}", "id", packageName
+            ))
+            button.text = formula
+            button.setOnClickListener { treat(formula) }
+        }
+        
+        findViewById<Button>(R.id.btn_restart).setOnClickListener { startNewGame() }
+    }
+    
+    private fun startNewGame() {
+        currentChannel = "太阳"
+        severity = 60
+        turn = 1
+        gameOver = false
+        score = 0
+        tvLog.text = ""
+        
+        updateUI()
+        addLog("🏥 新游戏开始 - 太阳病")
+    }
+    
+    private fun diagnose(symptom: String) {
+        if (gameOver) return
+        
+        // 简单辨证逻辑
+        currentChannel = when {
+            symptom.contains("恶寒") && symptom.contains("发热") -> "太阳"
+            symptom.contains("但热不寒") -> "阳明"
+            symptom.contains("寒热往来") -> "少阳"
+            symptom.contains("腹满") && symptom.contains("吐") -> "太阴"
+            symptom.contains("脉微细") -> "少阴"
+            else -> "太阳"
+        }
+        
+        addLog("🔍 辨证：$symptom → ${currentChannel}病")
+        score += 5
+        updateUI()
+    }
+    
+    private fun treat(formula: String) {
+        if (gameOver) return
+        
+        val correctFormula = channelFormulas[currentChannel] ?: "桂枝汤"
+        
+        if (formula == correctFormula) {
+            // 方证对应，治疗成功
+            val effect = when(formula) {
+                "桂枝汤" -> 20
+                "白虎汤" -> 25
+                "小柴胡汤" -> 18
+                "理中丸" -> 15
+                "四逆汤" -> 22
+                "乌梅丸" -> 16
+                else -> 10
+            }
+            
+            severity = maxOf(0, severity - effect)
+            addLog("✅ $formula 治疗${currentChannel}病，疗效$effect点")
+            score += 20
+        } else {
+            // 方证不符
+            severity = minOf(100, severity + 15)
+            addLog("❌ $formula 不适用${currentChannel}病，病情加重")
+        }
+        
+        // 病情自然进展
+        severity = minOf(100, severity + Random.nextInt(3, 8))
+        turn++
+        
+        // 病情传变
+        if (turn % 2 == 0 && sixChannels.indexOf(currentChannel) < sixChannels.size - 1) {
+            currentChannel = sixChannels[sixChannels.indexOf(currentChannel) + 1]
+            addLog("🔄 病邪传变：${sixChannels[sixChannels.indexOf(currentChannel) - 1]} → $currentChannel")
+        }
+        
+        // 检查游戏结束
+        if (severity <= 0) {
+            gameOver = true
+            addLog("🎉 治愈成功！")
+            score += 100
+        } else if (severity >= 100 || turn > 15) {
+            gameOver = true
+            addLog("💀 治疗失败，病情过重")
+        }
+        
+        updateUI()
+    }
+    
+    private fun updateUI() {
+        tvChannel.text = "病位：$currentChannel"
+        tvSeverity.text = "病情：$severity/100"
+        tvTurn.text = "回合：$turn/15"
+        tvScore.text = "分数：$score"
+        
+        // 根据严重度改变颜色
+        val color = when {
+            severity < 30 -> Color.GREEN
+            severity < 70 -> Color.YELLOW
+            else -> Color.RED
+        }
+        tvSeverity.setTextColor(color)
+    }
+    
+    private fun addLog(message: String) {
+        val current = tvLog.text.toString()
+        tvLog.text = "$message\n$current"
     }
 }
 EOF
-          echo "✅ Created MainActivity.kt"
-        fi
         
-        # 8. 创建布局文件（如果不存在）
-        if [ ! -f app/src/main/res/layout/activity_main.xml ]; then
-          cat > app/src/main/res/layout/activity_main.xml << 'EOF'
+        # 8. activity_main.xml
+        cat > app/src/main/res/layout/activity_main.xml << 'EOF'
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="20dp"
-    android:background="#f0f0f0"
-    android:gravity="center">
-    
-    <TextView
-        android:id="@+id/tv_title"
+    android:background="@android:color/white">
+
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="中医对战游戏"
-        android:textSize="28sp"
-        android:textStyle="bold"
-        android:gravity="center"
-        android:textColor="#2E7D32"
-        android:layout_marginBottom="40dp"/>
-    
-    <Button
-        android:id="@+id/btn_start"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="开始游戏"
-        android:backgroundTint="#4CAF50"
-        android:textColor="#FFFFFF"
-        android:padding="20dp"
-        android:textSize="18sp"/>
-        
-</LinearLayout>
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- 标题 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🏥 中医对战"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:textColor="#2E7D32"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 游戏状态 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#E8F5E9"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp"
+            android:elevation="2dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:id="@+id/tv_channel"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="病位：太阳"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:textColor="#d32f2f" />
+
+                <TextView
+                    android:id="@+id/tv_turn"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="回合：1/15"
+                    android:textSize="16sp"
+                    android:textColor="#666"
+                    android:gravity="end" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tv_severity"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="病情：60/100"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:textColor="#ff4444"
+                android:layout_marginBottom="8dp" />
+
+            <ProgressBar
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="12dp"
+                android:progress="60"
+                android:max="100"
+                android:progressTint="#ff4444"
+                android:progressBackgroundTint="#cccccc" />
+
+            <TextView
+                android:id="@+id/tv_score"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="分数：0"
+                android:textSize="16sp"
+                android:textColor="#FF9800"
+                android:layout_marginTop="8dp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- 症状选择 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🔍 选择症状"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#333"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#FFFFFF"
+            android:padding="12dp"
+            android:layout_marginBottom="16dp"
+            android:elevation="2dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="8dp">
+
+                <Button
+                    android:id="@+id/btn_symptom1"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="8dp"
+                    android:text="恶寒发热"
+                    style="@style/Widget.AppCompat.Button.Colored"
+                    app:backgroundTint="#2196F3" />
+
+                <Button
+                    android:id="@+id/btn_symptom2"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:text="但热不寒"
+                    style="@style/Widget.AppCompat.Button.Colored"
+                    app:backgroundTint="#2196F3" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="8dp">
+
+                <Button
+                    android:id="@+id/btn_symptom3"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="8dp"
+                    android:text="寒热往来"
+                    style="@style/Widget.AppCompat.Button.Colored"
+                    app:backgroundTint="#2196F3" />
+
+                <Button
+                    android:id="@+id/btn_symptom4"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:text="腹满而吐"
+                    style="@style/Widget.AppCompat.Button.Colored"
+                    app:backgroundTint="#2196F3" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/btn_symptom5"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:text="脉微细"
+                style="@style/Widget.AppCompat.Button.Colored"
+                app:backgroundTint="#2196F3" />
+        </LinearLayout>
+
+        <!-- 经方选择 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="💊 选择经方"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#333"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#FFFFFF"
+            android:padding="12dp"
+            android:layout_marginBottom="16dp"
+            android:elevation="2dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="8dp">
+
+                <Button
+                    android:id="@+id/btn_formula1"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="8dp"
+                    android:text="桂枝汤"
+                    style="@style/Widget.AppCompat.Button.Colored"
+                    app:backgroundTint="#4CAF50" />
+
+                <Button
+                    android:id="@+id/btn_formula2"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:text="白虎汤"
+                    style="@style/Widget.AppCompat.Button.Colored"
+                    app:backgroundTint="#4CAF50" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="8dp">
+
+                <Button
+                    android:id="@+id/btn_formula3"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="8dp"
+                    android:text="小柴胡汤"
+                    style="@style/Widget.AppCompat.Button.Colored"
+                    app:backgroundTint="#4CAF50" />
+
+                <Button
+                    android:id="@+id/btn_formula4"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:text="理中丸"
+                    style="@style/Widget.AppCompat.Button.Colored"
+                    app:backgroundTint="#4CAF50" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btn_formula5"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="8dp"
+                    android:text="四逆汤"
+                    style="@style/Widget.AppCompat.Button.Colored"
+                    app:backgroundTint="#4CAF50" />
+
+                <Button
+                    android:id="@+id/btn_formula6"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:text="乌梅丸"
+                    style="@style/Widget.AppCompat.Button.Colored"
+                    app:backgroundTint="#4CAF50" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 游戏日志 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📜 治疗记录"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#333"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#f8f8f8"
+            android:padding="12dp"
+            android:layout_marginBottom="16dp"
+            android:elevation="2dp">
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="250dp">
+
+                <TextView
+                    android:id="@+id/tv_log"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="14sp"
+                    android:textColor="#666"
+                    android:lineSpacingExtra="4dp" />
+            </ScrollView>
+        </LinearLayout>
+
+        <!-- 重新开始按钮 -->
+        <Button
+            android:id="@+id/btn_restart"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="🔄 重新开始游戏"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            style="@style/Widget.AppCompat.Button.Colored"
+            app:backgroundTint="#FF9800" />
+
+    </LinearLayout>
+</ScrollView>
 EOF
-          echo "✅ Created activity_main.xml"
-        fi
         
-    - name: Download gradlew if missing
+        # 9. styles.xml
+        cat > app/src/main/res/values/styles.xml << 'EOF'
+<resources>
+    <!-- Base application theme. -->
+    <style name="Theme.MedicalBattleGame" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <!-- Primary brand color. -->
+        <item name="colorPrimary">#2E7D32</item>
+        <item name="colorPrimaryVariant">#1B5E20</item>
+        <item name="colorOnPrimary">@android:color/white</item>
+        <!-- Secondary brand color. -->
+        <item name="colorSecondary">#FF9800</item>
+        <item name="colorSecondaryVariant">#F57C00</item>
+        <item name="colorOnSecondary">@android:color/black</item>
+        <!-- Status bar color. -->
+        <item name="android:statusBarColor" tools:targetApi="l">?attr/colorPrimaryVariant</item>
+        <!-- Customize your theme here. -->
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+</resources>
+EOF
+        
+        # 10. strings.xml
+        cat > app/src/main/res/values/strings.xml << 'EOF'
+<resources>
+    <string name="app_name">中医对战</string>
+    <string name="game_title">中医对战游戏</string>
+    <string name="diagnosis">辨证</string>
+    <string name="treatment">治疗</string>
+    <string name="restart">重新开始</string>
+</resources>
+EOF
+        
+        # 11. colors.xml
+        cat > app/src/main/res/values/colors.xml << 'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="purple_200">#FFBB86FC</color>
+    <color name="purple_500">#FF6200EE</color>
+    <color name="purple_700">#FF3700B3</color>
+    <color name="teal_200">#FF03DAC5</color>
+    <color name="teal_700">#FF018786</color>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="tcm_green">#2E7D32</color>
+    <color name="tcm_light_green">#E8F5E9</color>
+    <color name="tcm_orange">#FF9800</color>
+</resources>
+EOF
+        
+    - name: Download gradlew
       run: |
         if [ ! -f gradlew ]; then
           wget -q https://raw.githubusercontent.com/gradle/gradle/master/gradlew
           chmod +x gradlew
-          echo "✅ Downloaded gradlew"
         fi
         
     - name: Create local.properties
       run: echo "sdk.dir=$ANDROID_HOME" > local.properties
       
-    - name: Build Debug APK
-      run: ./gradlew assembleDebug --no-daemon
+    - name: Validate Gradle setup
+      run: |
+        echo "=== Gradle配置验证 ==="
+        ls -la
+        echo "=== gradle/wrapper/ ==="
+        ls -la gradle/wrapper/
+        echo "=== settings.gradle.kts 内容 ==="
+        cat settings.gradle.kts
+        echo "=== gradle-wrapper.properties 内容 ==="
+        cat gradle/wrapper/gradle-wrapper.properties
+      
+    - name: Build with Gradle
+      run: ./gradlew assembleDebug --stacktrace
       
     - name: Upload APK
       uses: actions/upload-artifact@v3
       with:
-        name: medical-battle-apk
-        path: app/build/outputs/apk/debug/app-debug.apk
-        
-    - name: Show success message
-      run: |
-        echo "🎉 构建成功！"
-        echo "📱 APK已生成，可在Artifacts中下载"
-        echo "📥 下载后安装到手机即可运行"
+        name: tcm-battle-apk
+        path: |
+          app/build/outputs/apk/debug/app-debug.apk
+          app/build/outputs/apk/release/app-release.apk
+          
+    - name: Create GitHub Release
+      if: success() && github.ref == 'refs/heads/main'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          app/build/outputs/apk/debug/app-debug.apk
+        tag_name: v1.0.0
+        name: 中医对战 v1.0.0
+        body: |
+          🏥 中医对战游戏 v1.0.0
+          
+          功能特色：
+          - 六经辨证系统
+          - 经方治疗对战
+          - 病情传变模拟
+          - 分数计分系统
+          
+          技术栈：
+          - Kotlin 1.9.20
+          - Gradle 8.2
+          - AGP 8.1.2
+          - Java 17
